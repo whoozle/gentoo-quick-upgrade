@@ -1,0 +1,100 @@
+#!/usr/bin/env python2
+
+import os
+import re
+import subprocess
+import logging
+import argparse
+
+logging.basicConfig(level=logging.DEBUG)
+
+log = logging.getLogger('upgrade')
+
+class Version(object):
+	ver_re = re.compile(r'\d+')
+	dev_re = re.compile(r'^9+$')
+	def __init__(self, text):
+		self.text = text
+		self.version = []
+		self.dev = False
+		for m in Version.ver_re.finditer(text):
+			v = m.group(0)
+			if Version.dev_re.match(v):
+				self.dev = True
+			self.version.append(int(v))
+
+	def __str__(self):
+		return 'version(%s)' %self.text
+
+	def __cmp__(self, o):
+		return cmp(self.version, o.version)
+
+installed = {}
+available = {}
+
+def read_installed_packages():
+	log.info('reading installed packages')
+	out = subprocess.check_output(['equery', 'list', '*'], bufsize=32768)
+	for atom in out.split('\n'):
+		atom = atom.strip()
+		if not atom:
+			continue
+		try:
+			package, version = parse_atom(atom)
+			installed[package] = version
+		except:
+			raise
+			log.warning('invalid package atom %s' %atom)
+	log.info('read %d installed packages' %len(installed))
+
+atom_re = re.compile(r'^(.*?)-([\.\d]+.*)$')
+
+def parse_atom(atom):
+	m = atom_re.match(atom)
+	if not m:
+		raise Exception('invalid atom %s' %atom)
+	return m.group(1), Version(m.group(2))
+
+def read_packages(root):
+	log.info('reading portage data...')
+	n_before = len(available)
+	for dirpath, dirs, files in os.walk(root, topdown=False):
+		dir = os.path.relpath(dirpath, root)
+		atom = '/'.join(dir.split('/')[-2:])
+		if atom[0] == '.':
+			continue
+
+		versions = []
+		for file in files:
+			if file.endswith('.ebuild'):
+				try:
+					name, _ext = os.path.splitext(file)
+					_name, version = parse_atom(name)
+					versions.append(version)
+				except:
+					raise
+					log.warning('invalid package atom %s' %atom)
+		if versions:
+			available[atom] = versions
+
+	log.info('read %d packages from %s' %(len(available) - n_before, dirpath))
+
+def upgrade():
+	packages = []
+	for atom, installed_version in installed.iteritems():
+		if atom in available:
+			versions = available[atom]
+			for version in versions:
+				if version.dev:
+					continue
+				if version > installed_version:
+					log.info('upgrade available for %s: %s' %(atom, version))
+					packages.append(atom)
+		else:
+			log.warning('unavailable package %s' %atom)
+	print 'sudo emerge -v1a %s' % ' '.join(packages)
+
+read_installed_packages()
+read_packages('/usr/portage')
+read_packages('/var/lib/layman')
+upgrade()
