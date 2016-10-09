@@ -1,13 +1,18 @@
 #!/usr/bin/env python2
 
+import argparse
+import cPickle
+import logging
 import os
+import os.path
 import re
 import subprocess
-import logging
-import argparse
+import time
+
+parser = argparse.ArgumentParser(description = 'Quick Gentoo upgrade calculator')
+parser.add_argument('--sync', '-s', action = 'store_true', default = False, help = 'synchronize version data')
 
 logging.basicConfig(level=logging.DEBUG)
-
 log = logging.getLogger('upgrade')
 
 class Version(object):
@@ -29,73 +34,116 @@ class Version(object):
 	def __cmp__(self, o):
 		return cmp(self.version, o.version)
 
-installed = {}
-available = {}
+class Portage(object):
+	Expiration = 24 * 3600
 
-def read_installed_packages():
-	log.info('reading installed packages')
-	out = subprocess.check_output(['equery', 'list', '*'], bufsize=32768)
-	for atom in out.split('\n'):
-		atom = atom.strip()
-		if not atom:
-			continue
-		try:
-			package, version = parse_atom(atom)
-			installed[package] = version
-		except:
-			raise
-			log.warning('invalid package atom %s' %atom)
-	log.info('read %d installed packages' %len(installed))
+	def __init__(self, args):
+		self.args = args
+		self.config_dir = os.path.expanduser('~/.gentoo-quick-upgrade')
+		if not os.path.exists(self.config_dir):
+			os.mkdir(self.config_dir)
 
-atom_re = re.compile(r'^(.*?)-([\.\d]+.*)$')
+		self.installed = {}
+		self.available = {}
+		self.read()
 
-def parse_atom(atom):
-	m = atom_re.match(atom)
-	if not m:
-		raise Exception('invalid atom %s' %atom)
-	return m.group(1), Version(m.group(2))
+	def config_path(self, name):
+		return os.path.join(self.config_dir, name)
 
-def read_packages(root):
-	log.info('reading portage data...')
-	n_before = len(available)
-	for dirpath, dirs, files in os.walk(root, topdown=False):
-		dir = os.path.relpath(dirpath, root)
-		atom = '/'.join(dir.split('/')[-2:])
-		if atom[0] == '.':
-			continue
+	def valid_file(self, name):
+		if self.args.sync:
+			return False
+		path = self.config_path(name)
+		return os.path.exists(path) and os.stat(path).st_mtime - time.time() < Portage.Expiration
 
-		versions = []
-		for file in files:
-			if file.endswith('.ebuild'):
-				try:
-					name, _ext = os.path.splitext(file)
-					_name, version = parse_atom(name)
-					versions.append(version)
-				except:
-					raise
-					log.warning('invalid package atom %s' %atom)
-		if versions:
-			available[atom] = versions
+	def load_file(self, name):
+		with open(self.config_path(name)) as f:
+			return cPickle.load(f)
 
-	log.info('read %d packages from %s' %(len(available) - n_before, dirpath))
+	def save_file(self, name, obj):
+		with open(self.config_path(name), 'wb') as f:
+			cPickle.dump(obj, f)
 
-def upgrade():
-	packages = []
-	for atom, installed_version in installed.iteritems():
-		if atom in available:
-			versions = available[atom]
-			for version in versions:
-				if version.dev:
-					continue
-				if version > installed_version:
-					log.info('upgrade available for %s: %s' %(atom, version))
-					packages.append(atom)
-					break
-		else:
-			log.warning('unavailable package %s' %atom)
-	print 'sudo emerge -v1a %s' % ' '.join(packages)
+	def read(self):
+		self.installed = self.read_installed_packages()
+		self.available.update(self.read_packages('/usr/portage'))
+		self.available.update(self.read_packages('/var/lib/layman'))
 
-read_installed_packages()
-read_packages('/usr/portage')
-read_packages('/var/lib/layman')
-upgrade()
+	def read_installed_packages(self):
+		if self.valid_file('installed'):
+			return self.load_file('installed')
+
+		log.info('reading installed packages')
+		out = subprocess.check_output(['equery', 'list', '*'], bufsize=32768)
+		installed = {}
+		for atom in out.split('\n'):
+			atom = atom.strip()
+			if not atom:
+				continue
+			try:
+				package, version = self.parse_atom(atom)
+				installed[package] = version
+			except:
+				raise
+				log.warning('invalid package atom %s' %atom)
+		log.info('read %d installed packages' %len(installed))
+		self.save_file('installed', installed)
+		return installed
+
+	atom_re = re.compile(r'^(.*?)-([\.\d]+.*)$')
+
+	def parse_atom(self, atom):
+		m = Portage.atom_re.match(atom)
+		if not m:
+			raise Exception('invalid atom %s' %atom)
+		return m.group(1), Version(m.group(2))
+
+	def read_packages(self, root):
+		cache = 'available' + root.replace('/', '-')
+		if self.valid_file(cache):
+			return self.load_file(cache)
+
+		log.info('reading portage data...')
+		available = {}
+		for dirpath, dirs, files in os.walk(root, topdown=False):
+			dir = os.path.relpath(dirpath, root)
+			atom = '/'.join(dir.split('/')[-2:])
+			if atom[0] == '.':
+				continue
+
+			versions = []
+			for file in files:
+				if file.endswith('.ebuild'):
+					try:
+						name, _ext = os.path.splitext(file)
+						_name, version = self.parse_atom(name)
+						versions.append(version)
+					except:
+						raise
+						log.warning('invalid package atom %s' %atom)
+			if versions:
+				available[atom] = versions
+
+		log.info('read %d packages from %s' %(len(available), dirpath))
+		self.save_file(cache, available)
+		return available
+
+	def upgrade(self):
+		packages = []
+		for atom, installed_version in self.installed.iteritems():
+			if atom in self.available:
+				versions = self.available[atom]
+				for version in versions:
+					if version.dev:
+						continue
+					if version > installed_version:
+						log.info('upgrade available for %s: %s' %(atom, version))
+						packages.append(atom)
+						break
+			else:
+				log.warning('unavailable package %s' %atom)
+		print 'sudo emerge -v1a %s' % ' '.join(packages)
+
+args = parser.parse_args()
+portage = Portage(args)
+portage.upgrade()
