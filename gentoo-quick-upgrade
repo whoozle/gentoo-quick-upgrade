@@ -129,6 +129,7 @@ class Portage(object):
 		return available
 
 	def upgrade(self):
+		log.info('calculating upgrade...')
 		packages = []
 		for atom, installed_version in self.installed.iteritems():
 			if atom in self.available:
@@ -142,6 +143,7 @@ class Portage(object):
 						break
 			else:
 				log.warning('unavailable package %s' %atom)
+		log.info('done')
 		print 'sudo emerge -v1a %s' % ' '.join(packages)
 
 args = parser.parse_args()
