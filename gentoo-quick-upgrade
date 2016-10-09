@@ -90,6 +90,7 @@ def upgrade():
 				if version > installed_version:
 					log.info('upgrade available for %s: %s' %(atom, version))
 					packages.append(atom)
+					break
 		else:
 			log.warning('unavailable package %s' %atom)
 	print 'sudo emerge -v1a %s' % ' '.join(packages)
