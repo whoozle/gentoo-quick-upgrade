@@ -12,7 +12,7 @@ log = logging.getLogger('upgrade')
 
 class Version(object):
 	ver_re = re.compile(r'\d+')
-	dev_re = re.compile(r'^9+$')
+	dev_re = re.compile(r'^9999+$')
 	def __init__(self, text):
 		self.text = text
 		self.version = []
