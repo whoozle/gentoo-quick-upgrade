@@ -54,7 +54,7 @@ class Portage(object):
 		if self.args.sync:
 			return False
 		path = self.config_path(name)
-		return os.path.exists(path) and os.stat(path).st_mtime - time.time() < Portage.Expiration
+		return os.path.exists(path) and time.time() - os.stat(path).st_mtime < Portage.Expiration
 
 	def load_file(self, name):
 		with open(self.config_path(name)) as f:
