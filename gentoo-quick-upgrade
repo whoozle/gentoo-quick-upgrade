@@ -144,7 +144,7 @@ class Portage(object):
 			else:
 				log.warning('unavailable package %s' %atom)
 		log.info('done')
-		print 'sudo emerge -v1a %s' % ' '.join(packages)
+		print 'sudo emerge --keep-going=y -v1a %s' % ' '.join(packages)
 
 args = parser.parse_args()
 portage = Portage(args)
