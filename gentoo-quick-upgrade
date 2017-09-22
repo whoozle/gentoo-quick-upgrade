@@ -119,7 +119,6 @@ class Portage(object):
 						_name, version = self.parse_atom(name)
 						versions.append(version)
 					except:
-						raise
 						log.warning('invalid package atom %s' %atom)
 			if versions:
 				available[atom] = versions
