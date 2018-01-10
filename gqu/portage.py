@@ -3,7 +3,6 @@ import re
 from gqu.version import Version
 from gqu.cache import Cache
 import logging
-import subprocess
 
 log = logging.getLogger('portage')
 
@@ -36,15 +35,20 @@ class Portage(object):
 			return installed
 
 		log.info('reading installed packages')
-		out = subprocess.check_output(['equery', 'list', '*'], bufsize=32768)
 		installed = {}
-		for atom in out.split('\n'):
-			atom = atom.strip()
-			if not atom:
+		for dirpath, dirs, files in os.walk('/var/db/pkg'):
+			if 'PF' not in files:
 				continue
+			with open(os.path.join(dirpath, 'SLOT')) as f:
+				slot = f.read().strip()
+			with open(os.path.join(dirpath, 'CATEGORY')) as f:
+				cat = f.read().strip()
+			with open(os.path.join(dirpath, 'PF')) as f:
+				pf = f.read().strip()
+			atom = cat + '/' + pf
 			try:
 				package, version = self.parse_atom(atom)
-				installed[package] = version
+				installed[package, slot] = version
 			except:
 				raise
 				log.warning('invalid package atom %s' %atom)
@@ -93,7 +97,7 @@ class Portage(object):
 	def upgrade(self):
 		log.info('calculating upgrade...')
 		packages = []
-		for atom, installed_version in self.installed.iteritems():
+		for (atom, slot), installed_version in self.installed.iteritems():
 			if atom in self.available:
 				versions = self.available[atom]
 				for version in versions:
