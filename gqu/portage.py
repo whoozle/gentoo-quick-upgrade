@@ -1,42 +1,29 @@
 import os
 import re
 from gqu.version import Version
-import time
+from gqu.cache import Cache
 import logging
 import subprocess
-import cPickle
 
 log = logging.getLogger('portage')
 
 class Portage(object):
-	Expiration = 24 * 3600
-
 	def __init__(self, args):
 		self.args = args
 		self.config_dir = os.path.expanduser('~/.gentoo-quick-upgrade')
-		if not os.path.exists(self.config_dir):
-			os.mkdir(self.config_dir)
+		self.cache = Cache(self.config_dir)
 
 		self.installed = {}
 		self.available = {}
 		self.read()
 
-	def config_path(self, name):
-		return os.path.join(self.config_dir, name)
-
-	def valid_file(self, name):
-		if self.args.sync:
-			return False
-		path = self.config_path(name)
-		return os.path.exists(path) and time.time() - os.stat(path).st_mtime < Portage.Expiration
-
 	def load_file(self, name):
-		with open(self.config_path(name)) as f:
-			return cPickle.load(f)
+		if self.args.sync:
+			return None
+		return self.cache.load_file(name)
 
 	def save_file(self, name, obj):
-		with open(self.config_path(name), 'wb') as f:
-			cPickle.dump(obj, f)
+		return self.cache.save_file(name, obj)
 
 	def read(self):
 		self.installed = self.read_installed_packages()
@@ -44,8 +31,9 @@ class Portage(object):
 		self.available.update(self.read_packages('/var/lib/layman'))
 
 	def read_installed_packages(self):
-		if self.valid_file('installed'):
-			return self.load_file('installed')
+		installed = self.load_file('installed')
+		if installed:
+			return installed
 
 		log.info('reading installed packages')
 		out = subprocess.check_output(['equery', 'list', '*'], bufsize=32768)
@@ -73,9 +61,10 @@ class Portage(object):
 		return m.group(1), Version(m.group(2))
 
 	def read_packages(self, root):
-		cache = 'available' + root.replace('/', '-')
-		if self.valid_file(cache):
-			return self.load_file(cache)
+		cache = 'available' + root
+		available = self.cache.load_file(cache)
+		if available:
+			return available
 
 		log.info('reading portage data...')
 		available = {}
