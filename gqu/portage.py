@@ -97,7 +97,7 @@ class Portage(object):
 					if version.dev:
 						continue
 					if version > installed_version:
-						log.info('upgrade available for %s: %s' %(atom, version))
+						log.info('upgrade available for %s: %s -> %s' %(atom, installed_version, version))
 						packages.append(atom)
 						break
 			else:
