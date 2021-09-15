@@ -103,4 +103,4 @@ class Portage(object):
 			else:
 				log.warning('unavailable package %s' %atom)
 		log.info('done')
-		print 'sudo emerge --keep-going=y -v1a %s' % ' '.join(packages)
+		print 'sudo emerge --keep-going=y -v1a %s' % ' '.join(sorted(packages))
