@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+import logging
+import os
+import sys
+import re
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger('eclean')
+
+parser = ArgumentParser(description = 'Quick Gentoo distfiles cleaner')
+parser.add_argument("--root", default="/usr/portage/distfiles")
+parser.add_argument("-n", "--no-op", default=False, action="store_true")
+
+args = parser.parse_args()
+distfiles = os.listdir(args.root)
+
+version_re = re.compile(r'.*[-_](\d+\.\d+(?:\.\d)*).*')
+
+versions = {}
+def parse_version(vstr):
+    return tuple(vstr.split("."))
+
+remove = []
+
+for file in sorted(distfiles):
+    m = version_re.match(file)
+    if m is None:
+        continue
+    b, e = m.span(1)
+    prefix = file[:b]
+    version = parse_version(m.group(1))
+    if prefix not in versions:
+        versions[prefix] = (file, version)
+    else:
+        prev_file, prev_version = versions[prefix]
+        if prev_version < version:
+            versions[prefix] = (file, version)
+            remove.append(prev_file)
+        else:
+            remove.append(file)
+
+log.info("deleting %d files", len(remove))
+if not args.no_op:
+    for file in remove:
+        file = os.path.join(args.root, file)
+        try:
+            os.unlink(file)
+        except:
+            log.error("error unlinking file %s", file, exc_info=sys.exc_info())
