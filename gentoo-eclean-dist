@@ -6,14 +6,16 @@ import os
 import sys
 import re
 
-logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger('eclean')
-
 parser = ArgumentParser(description = 'Quick Gentoo distfiles cleaner')
 parser.add_argument("--root", default="/usr/portage/distfiles")
 parser.add_argument("-n", "--no-op", default=False, action="store_true")
+parser.add_argument("-v", "--verbose", default=False, action="store_true")
 
 args = parser.parse_args()
+
+logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+log = logging.getLogger('eclean')
+
 distfiles = os.listdir(args.root)
 
 version_re = re.compile(r'.*[-_](\d+\.\d+(?:\.\d)*).*')
@@ -42,10 +44,11 @@ for file in sorted(distfiles):
             remove.append(file)
 
 log.info("deleting %d files", len(remove))
-if not args.no_op:
-    for file in remove:
-        file = os.path.join(args.root, file)
-        try:
+for file in remove:
+    log.debug("deleting %s...", file)
+    file = os.path.join(args.root, file)
+    try:
+        if not args.no_op:
             os.unlink(file)
-        except:
-            log.error("error unlinking file %s", file, exc_info=sys.exc_info())
+    except:
+        log.error("error unlinking file %s", file, exc_info=sys.exc_info())
