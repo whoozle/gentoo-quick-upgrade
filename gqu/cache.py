@@ -1,6 +1,10 @@
-import cPickle
+import pickle
 import os
+import sys
+import logging
 import time
+
+log = logging.getLogger("cache")
 
 class Cache(object):
 	Expiration = 24 * 3600
@@ -20,9 +24,12 @@ class Cache(object):
 	def load_file(self, name):
 		if not self.valid_file(name):
 			return None
-		with open(self.get_path(name)) as f:
-			return cPickle.load(f)
+		try:
+			with open(self.get_path(name), "rb") as f:
+				return pickle.load(f)
+		except:
+			log.error("failed opening cache", exc_info=sys.exc_info())
 
 	def save_file(self, name, obj):
 		with open(self.get_path(name), 'wb') as f:
-			cPickle.dump(obj, f)
+			pickle.dump(obj, f)

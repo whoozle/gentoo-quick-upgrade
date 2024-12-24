@@ -16,5 +16,8 @@ class Version(object):
 	def __str__(self):
 		return 'version(%s)' %self.text
 
-	def __cmp__(self, o):
-		return cmp(self.version, o.version)
+	def __eq__(self, o):
+		return self.version == o.version
+
+	def __lt__(self, o):
+		return self.version < o.version

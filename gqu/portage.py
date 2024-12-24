@@ -51,7 +51,6 @@ class Portage(object):
 				installed[package, slot] = version
 			except:
 				raise
-				log.warning('invalid package atom %s' %atom)
 		log.info('read %d installed packages' %len(installed))
 		self.save_file('installed', installed)
 		return installed
@@ -72,10 +71,10 @@ class Portage(object):
 
 		log.info('reading portage data...')
 		available = {}
-		process = subprocess.Popen(['equery', 'list', '-p', '-F', '$cp $slot $version', '*'], stdout=subprocess.PIPE, bufsize=1024 * 128)
+		process = subprocess.Popen(['equery', 'list', '-p', '-F', '$cp $slot $version', '*'], stdout=subprocess.PIPE, bufsize=1024 * 128, text=True)
 		while True:
 			line = process.stdout.readline().strip()
-			if line != b'':
+			if line:
 				atom, slot, version = line.split()
 				versions = available.setdefault((atom, slot), [])
 				versions.append(Version(version))
@@ -89,7 +88,7 @@ class Portage(object):
 	def upgrade(self):
 		log.info('calculating upgrade...')
 		packages = []
-		for (atom, slot), installed_version in self.installed.iteritems():
+		for (atom, slot), installed_version in self.installed.items():
 			key = (atom, slot)
 			if key in self.available:
 				versions = self.available[key]
@@ -103,4 +102,4 @@ class Portage(object):
 			else:
 				log.warning('unavailable package %s' %atom)
 		log.info('done')
-		print 'sudo emerge --keep-going=y -v1a %s' % ' '.join(sorted(packages))
+		print('sudo emerge --keep-going=y -v1a %s' % ' '.join(sorted(packages)))
